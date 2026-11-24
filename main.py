@@ -13,11 +13,12 @@ the batch's own lists.
 
 Strategy, in one paragraph: ride the second wind, not the launch. Every
 coin is watched from its CreateEvent. A coin earns an entry only after it
-has shown real early strength — it ran up from its create price, buyers
-outweigh sellers on the tape, and the creator has not sold — and then given
-some of it back in a pullback from its peak. That dip is the entry: the
-launch snipers already left, the tape has been tested once, and the price
-is still above where the coin started. The bot buys one stake per coin,
+has shown real early strength — it ran up at least 25% from its create
+price, buyers outweigh sellers two-to-one on the tape, and the creator has
+not sold — and then given some of it back in a pullback from its peak and
+started to bounce off the dip low. That bounce is the entry: the launch
+snipers already left, the tape has been tested once, and the price is
+still well above where the coin started. The bot buys one stake per coin,
 banks half at a first take-profit, and lets the rest run under a trailing
 stop, with a hard stop, a hold limit and a stale exit behind it. A small
 pacing probe keeps the run above the guardrail pace (at least 20 coins,
@@ -39,29 +40,30 @@ import makefun_bot  # noqa: E402  (after the sys.path line: -P leaves the script
 LAMPORTS_PER_SOL = makefun_bot.LAMPORTS_PER_SOL
 
 # --- Pullback entry: what a coin's tape must show -------------------------
-MIN_AGE_SLOTS = 2          # youngest age (slots since create) an entry may be decided at
-MAX_AGE_SLOTS = 60         # oldest age (slots since create) an entry may be decided at
-MIN_PEAK_RUNUP = 1.08      # peak price over the create price: the strength test
-MIN_PULLBACK = 0.04        # price must have fallen this far from its peak: the dip
-MIN_ABOVE_CREATE = 1.02    # ... while still holding this far above the create price
-MIN_BUY_SELL_RATIO = 1.5   # cumulative buy SOL over cumulative sell SOL on the tape
-MIN_REAL_SOL = 1.5         # curve real SOL bounds at decision time
+MIN_AGE_SLOTS = 3          # youngest age (slots since create) an entry may be decided at
+MAX_AGE_SLOTS = 120        # oldest age (slots since create) an entry may be decided at
+MIN_PEAK_RUNUP = 1.25      # peak price over the create price: the strength test
+MIN_PULLBACK = 0.05        # price must have fallen this far from its peak: the dip
+BOUNCE = 0.02              # ... and recovered this far from its dip low: the bounce
+MIN_ABOVE_CREATE = 1.10    # ... while still holding this far above the create price
+MIN_BUY_SELL_RATIO = 2.0   # cumulative buy SOL over cumulative sell SOL on the tape
+MIN_REAL_SOL = 3.0         # curve real SOL bounds at decision time
 MAX_REAL_SOL = 80.0
 SKIP_DEV_SOLD = True       # creator sold before entry: skip the coin
 
 # --- Sizing ----------------------------------------------------------------
-STAKE_SOL = 0.15           # lamports to aim for per coin in total
+STAKE_SOL = 0.08           # lamports to aim for per coin in total
 MIN_BUY_SOL = 0.015        # smallest single buy worth paying the tx fee for
 BUY_SLIPPAGE_BPS = 10000
 SELL_SLIPPAGE_BPS = 10000
 
 # --- Exits -----------------------------------------------------------------
-TRIM_AT = 0.40             # bank half the position when value reaches cost * (1 + TRIM_AT)
-TAKE_PROFIT = 1.00         # sell the rest when value reaches cost * (1 + TAKE_PROFIT)
-STOP_LOSS = 0.15           # sell all when value falls to cost * (1 - STOP_LOSS)
-TRAIL_ARM = 0.20           # trailing stop arms once peak value reaches cost * (1 + TRAIL_ARM)
-TRAIL = 0.15               # sell all when value falls to peak * (1 - TRAIL)
-MAX_HOLD_SLOTS = 300       # exit after this many slots held
+TRIM_AT = 0.25             # bank half the position when value reaches cost * (1 + TRIM_AT)
+TAKE_PROFIT = 0.60         # sell the rest when value reaches cost * (1 + TAKE_PROFIT)
+STOP_LOSS = 0.10           # sell all when value falls to cost * (1 - STOP_LOSS)
+TRAIL_ARM = 0.15           # trailing stop arms once peak value reaches cost * (1 + TRAIL_ARM)
+TRAIL = 0.12               # sell all when value falls to peak * (1 - TRAIL)
+MAX_HOLD_SLOTS = 120       # exit after this many slots held
 STALE_SLOTS = 600          # exit when no trade has hit the coin for this many slots
 EXIT_ON_DEV_SELL = True    # exit at once when the creator sells while held
 
@@ -82,7 +84,7 @@ def _lamports(sol):
 class Coin:
     """One watched launch, from its CreateEvent on."""
 
-    __slots__ = ("created", "creator", "vq0", "vt0", "peak", "buy_sol",
+    __slots__ = ("created", "creator", "vq0", "vt0", "peak", "trough", "buy_sol",
                  "sell_sol", "dev_sold", "last_trade_slot", "done",
                  "entered", "complete")
 
@@ -92,6 +94,7 @@ class Coin:
         self.vq0 = vq0             # create-time reserves: run-up is measured against them
         self.vt0 = vt0
         self.peak = 1.0            # best price over the create price seen so far
+        self.trough = 1.0          # lowest price over the create price since the peak
         self.buy_sol = 0           # lamports bought by anyone
         self.sell_sol = 0          # lamports sold by anyone
         self.dev_sold = False
@@ -154,6 +157,8 @@ class PullbackRider:
             return False
         if ratio > coin.peak * (1.0 - MIN_PULLBACK):
             return False
+        if ratio < coin.trough * (1.0 + BOUNCE):
+            return False
         if ratio < MIN_ABOVE_CREATE:
             return False
         return True
@@ -179,12 +184,15 @@ class PullbackRider:
                     continue
                 sol = int(event["sol_amount"])
                 coin.last_trade_slot = event["slot"]
-                curve = state.curves.get(event["mint"])
-                if curve is not None:
-                    ratio = coin.price_ratio(curve.virtual_quote_reserves,
-                                             curve.virtual_token_reserves)
-                    if ratio > coin.peak:
-                        coin.peak = ratio
+                # The event carries its own reserves: measure the tape trade by trade,
+                # not against the batch's final curve state.
+                ratio = coin.price_ratio(int(event["virtual_quote_reserves"]),
+                                         int(event["virtual_token_reserves"]))
+                if ratio > coin.peak:
+                    coin.peak = ratio
+                    coin.trough = ratio
+                elif ratio < coin.trough:
+                    coin.trough = ratio
                 if event["is_buy"]:
                     coin.buy_sol += sol
                 else:
