@@ -41,30 +41,30 @@ LAMPORTS_PER_SOL = makefun_bot.LAMPORTS_PER_SOL
 
 # --- Pullback entry: what a coin's tape must show -------------------------
 MIN_AGE_SLOTS = 3          # youngest age (slots since create) an entry may be decided at
-MAX_AGE_SLOTS = 180        # oldest age (slots since create) an entry may be decided at
-MIN_PEAK_RUNUP = 1.60      # peak price over the create price: the strength test
-MIN_PULLBACK = 0.08        # price must have fallen this far from its peak: the dip
+MAX_AGE_SLOTS = 120        # oldest age (slots since create) an entry may be decided at
+MIN_PEAK_RUNUP = 1.40      # peak price over the create price: the strength test
+MIN_PULLBACK = 0.05        # price must have fallen this far from its peak: the dip
 BOUNCE = 0.02              # ... and recovered this far from its dip low: the bounce
-MIN_ABOVE_CREATE = 1.30    # ... while still holding this far above the create price
+MIN_ABOVE_CREATE = 1.10    # ... while still holding this far above the create price
 MIN_BUY_SELL_RATIO = 3.0   # cumulative buy SOL over cumulative sell SOL on the tape
 MIN_REAL_SOL = 5.0         # curve real SOL bounds at decision time
 MAX_REAL_SOL = 80.0
 SKIP_DEV_SOLD = True       # creator sold before entry: skip the coin
 
 # --- Sizing ----------------------------------------------------------------
-STAKE_SOL = 0.10           # lamports to aim for per coin in total
-MIN_BUY_SOL = 0.02        # smallest single buy worth paying the tx fee for
+STAKE_SOL = 0.08           # lamports to aim for per coin in total
+MIN_BUY_SOL = 0.015        # smallest single buy worth paying the tx fee for
 BUY_SLIPPAGE_BPS = 10000
 SELL_SLIPPAGE_BPS = 10000
 
 # --- Exits -----------------------------------------------------------------
-TRIM_AT = 0.50             # bank half the position when value reaches cost * (1 + TRIM_AT)
-TAKE_PROFIT = 3.00         # effectively never: winners exit on the trailing stop         # sell the rest when value reaches cost * (1 + TAKE_PROFIT)
-STOP_LOSS = 0.25           # sell all when value falls to cost * (1 - STOP_LOSS)
-TRAIL_ARM = 0.50           # trailing stop arms once peak value reaches cost * (1 + TRAIL_ARM)
-TRAIL = 0.25               # sell all when value falls to peak * (1 - TRAIL)
-MAX_HOLD_SLOTS = 2000       # exit after this many slots held
-STALE_SLOTS = 1200          # exit when no trade has hit the coin for this many slots
+TRIM_AT = 0.25             # bank half the position when value reaches cost * (1 + TRIM_AT)
+TAKE_PROFIT = 0.80         # sell the rest when value reaches cost * (1 + TAKE_PROFIT)
+STOP_LOSS = 0.05           # sell all when value falls to cost * (1 - STOP_LOSS)
+TRAIL_ARM = 0.20           # trailing stop arms once peak value reaches cost * (1 + TRAIL_ARM)
+TRAIL = 0.15               # sell all when value falls to peak * (1 - TRAIL)
+MAX_HOLD_SLOTS = 300       # exit after this many slots held
+STALE_SLOTS = 600          # exit when no trade has hit the coin for this many slots
 EXIT_ON_DEV_SELL = True    # exit at once when the creator sells while held
 
 # --- Guardrail pacing ------------------------------------------------------
